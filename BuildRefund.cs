@@ -11,7 +11,7 @@ using UnityEngine;
 namespace Oxide.Plugins
 {
     [Info("Build Refund", "VisEntities", "1.0.0")]
-    [Description(" ")]
+    [Description("Demolishing structures returns some of the original cost.")]
     public class BuildRefund : RustPlugin
     {
         #region Fields
