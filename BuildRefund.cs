@@ -5,15 +5,23 @@
  */
 
 using Newtonsoft.Json;
+using Oxide.Core.Plugins;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Build Refund", "VisEntities", "1.0.0")]
+    [Info("Build Refund", "VisEntities", "1.1.0")]
     [Description("Demolishing structures returns some of the original cost.")]
     public class BuildRefund : RustPlugin
     {
+        #region 3rd Party Dependencies
+
+        [PluginReference]
+        private readonly Plugin BetterNoEscape;
+
+        #endregion 3rd Party Dependencies
+
         #region Fields
 
         private static BuildRefund _plugin;
@@ -30,6 +38,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Refund Percentage")]
             public int RefundPercentage { get; set; }
+
+            [JsonProperty("Block Refund During Raid Block (Better No Escape)")]
+            public bool BlockRefundDuringRaidBlock { get; set; }
         }
 
         protected override void LoadConfig()
@@ -62,6 +73,11 @@ namespace Oxide.Plugins
             if (string.Compare(_config.Version, "1.0.0") < 0)
                 _config = defaultConfig;
 
+            if (string.Compare(_config.Version, "1.1.0") < 0)
+            {
+                _config.BlockRefundDuringRaidBlock = defaultConfig.BlockRefundDuringRaidBlock;
+            }
+
             PrintWarning("Config update complete! Updated from version " + _config.Version + " to " + Version.ToString());
             _config.Version = Version.ToString();
         }
@@ -71,7 +87,8 @@ namespace Oxide.Plugins
             return new Configuration
             {
                 Version = Version.ToString(),
-                RefundPercentage = 100
+                RefundPercentage = 100,
+                BlockRefundDuringRaidBlock = false
             };
         }
 
@@ -98,6 +115,12 @@ namespace Oxide.Plugins
 
             if (!PermissionUtil.HasPermission(player, PermissionUtil.USE))
                 return null;
+
+            if (_config.BlockRefundDuringRaidBlock && BetterNoEscapeUtil.IsRaidBlocked(player))
+            {
+                MessagePlayer(player, Lang.RefundBlocked);
+                return null;
+            }
 
             Construction construction = block.blockDefinition;
             if (construction == null)
@@ -190,18 +213,45 @@ namespace Oxide.Plugins
 
         #endregion Permissions
 
+        #region 3rd Party Integration
+
+        public static class BetterNoEscapeUtil
+        {
+            private static bool Loaded
+            {
+                get
+                {
+                    return _plugin != null &&
+                           _plugin.BetterNoEscape != null &&
+                           _plugin.BetterNoEscape.IsLoaded;
+                }
+            }
+
+            public static bool IsRaidBlocked(BasePlayer player)
+            {
+                if (!Loaded || player == null)
+                    return false;
+
+                return _plugin.BetterNoEscape.Call<bool>("API_IsRaidBlocked", player);
+            }
+        }
+
+        #endregion 3rd Party Integration
+
         #region Localization
 
         private class Lang
         {
             public const string RefundSummary = "RefundSummary";
+            public const string RefundBlocked = "RefundBlocked";
         }
 
         protected override void LoadDefaultMessages()
         {
             lang.RegisterMessages(new Dictionary<string, string>
             {
-                [Lang.RefundSummary] = "Refund issued for demolishing {0} (Grade: {1}):\n{2}"
+                [Lang.RefundSummary] = "Refund issued for demolishing {0} (Grade: {1}):\n{2}",
+                [Lang.RefundBlocked] = "You won't receive a refund for demolishing while raid-blocked.",
 
             }, this, "en");
         }
